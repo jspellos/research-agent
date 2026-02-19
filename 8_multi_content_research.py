@@ -518,7 +518,8 @@ if st.button("🚀 Run Research", type="primary"):
 
     if editor_text:
         full_output += f"---\n\n## EDITED CONTENT\n\n{editor_text}\n\n"
-
+        
+    os.makedirs("Output", exist_ok=True)
     md_filename = f"Output/{base_filename}.md"
     with open(md_filename, "w", encoding="utf-8") as f:
         f.write(full_output)
