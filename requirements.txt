@@ -1,0 +1,7 @@
+anthropic
+streamlit
+python-dotenv
+youtube-transcript-api
+python-docx
+requests
+pyyaml
