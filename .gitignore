@@ -1,0 +1,37 @@
+# ============================================
+# .gitignore for Research & Content Agent
+# ============================================
+
+# --- SECRETS (most important) ---
+.env
+.env.local
+.env.production
+
+# --- GENERATED OUTPUT FILES ---
+# Don't track timestamped output files (they'll pile up fast)
+Output/
+
+# --- PYTHON CACHE ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- VIRTUAL ENVIRONMENT ---
+venv/
+.venv/
+env/
+
+# --- IDE / EDITOR FILES ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS JUNK ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- STREAMLIT ---
+.streamlit/secrets.toml
