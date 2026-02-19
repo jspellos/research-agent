@@ -9,6 +9,10 @@ import os
 
 load_dotenv()
 
+# Support both local .env and Streamlit Cloud secrets
+if "ANTHROPIC_API_KEY" in st.secrets:
+    os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
+
 client = Anthropic()
 
 
