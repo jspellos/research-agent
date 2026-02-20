@@ -51,7 +51,6 @@ while True:
         tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]
     )
 
-    print(f"[DEBUG initial stop_reason: {response.stop_reason}]")
 
     while response.stop_reason != "end_turn":
         messages.append({"role": "assistant", "content": response.content})

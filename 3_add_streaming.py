@@ -94,6 +94,6 @@ while True:
     # Auto-save to timestamped file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"output_{timestamp}.md"
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         f.write(reply)
     print(f"Saved to {filename}")
