@@ -448,6 +448,9 @@ if st.button("🚀 Run Research", type="primary"):
 
     st.success("Research complete!")
 
+    if not research_text.strip():
+        research_text = "No research data was returned. Please provide a general overview of the topic."
+
     # ============================
     # RUN WRITER AGENT
     # ============================
