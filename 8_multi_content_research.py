@@ -68,10 +68,59 @@ def get_youtube_transcript(url):
 
 
 # ============================================================
-# HELPER: Fetch webpage content
+# UPGRADED: Fetch webpage content (Firecrawl + static fallback)
 # ============================================================
+# 
+# WHAT CHANGED:
+#   - Firecrawl is now the PRIMARY method for fetching webpage content
+#   - Handles JavaScript-rendered pages (Twitter/X, Cvent, Bizzabo, etc.)
+#   - Falls back to the original static HTML parser if Firecrawl is 
+#     unavailable (no API key) or fails
+#   - Same function name, same return type — drop-in replacement
+#
+# SETUP REQUIRED:
+#   1. Sign up free at https://www.firecrawl.dev (500 free pages/month)
+#   2. Add to your .env file:   FIRECRAWL_API_KEY=fc-your-key-here
+#   3. Add to requirements.txt:  firecrawl
+#   4. pip install firecrawl (or pip install -r requirements.txt)
+#
+# For Streamlit Cloud deployment, also add firecrawl to requirements.txt
+# and add FIRECRAWL_API_KEY to your Streamlit Cloud secrets.
+# ============================================================
+
 def get_webpage_content(url):
-    """Extract text content from a webpage URL."""
+    """Extract text content from a webpage URL.
+    
+    Uses Firecrawl API (handles JavaScript/dynamic pages) as primary method.
+    Falls back to basic HTML parsing if Firecrawl is unavailable.
+    """
+    
+    # --- PRIMARY METHOD: Firecrawl (handles dynamic/JS pages) ---
+    firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
+    
+    if firecrawl_key:
+        try:
+            from firecrawl import Firecrawl
+            
+            app = Firecrawl(api_key=firecrawl_key)
+            result = app.scrape(url, formats=["markdown"])
+            
+            full_text = result.get("markdown", "")
+            
+            if full_text:
+                # Trim to avoid overwhelming the agent
+                if len(full_text) > 8000:
+                    full_text = full_text[:8000] + "\n\n[Content trimmed — page was very long]"
+                return full_text
+            else:
+                return f"[Firecrawl returned no content for {url} — page may require login or be blocked]"
+        
+        except Exception as e:
+            # Firecrawl failed — fall through to static fallback
+            print(f"[Firecrawl error for {url}: {e} — trying static fallback]")
+    
+    # --- FALLBACK METHOD: Static HTML parsing (original approach) ---
+    # Works for simple/static pages. Won't work for JS-rendered content.
     try:
         import requests
         from html.parser import HTMLParser
@@ -117,24 +166,41 @@ def get_webpage_content(url):
 
 
 # ============================================================
-# THE ENGINE: Run any agent with streaming for Streamlit
+# AGENTIC LOOP: Stream agent responses with tool use support
 # ============================================================
+# This function was originally in 7_editor_agent.py and needed to
+# be brought into this file. Updated with:
+#   - usage_tracker parameter for token cost monitoring
+#   - Trailing whitespace fix (API rejects assistant messages
+#     that end with spaces/newlines)
+#   - Increased max_tokens from 4096 to 16000 for research output
+# ============================================================
+
 def run_agent_stream(system_prompt, user_message, tools=None, usage_tracker=None):
-    """Run a single agent. Yields text chunks for streaming.
-    If usage_tracker dict is provided, accumulates token counts into it."""
+    """Run a single agent with streaming. Yields text chunks as they arrive.
+    
+    Handles the agentic loop: if Claude wants to use tools (like web search),
+    the loop continues until Claude signals end_turn.
+    
+    Args:
+        system_prompt: The system prompt defining agent behavior
+        user_message: The user's input message
+        tools: Optional list of tool definitions (e.g., web search)
+        usage_tracker: Optional dict to accumulate token usage stats
+    """
 
     messages = [{"role": "user", "content": user_message}]
 
     params = {
         "model": "claude-sonnet-4-5-20250929",
-        "max_tokens": 4096,
+        "max_tokens": 16000,
         "system": system_prompt,
         "messages": messages,
     }
     if tools:
         params["tools"] = tools
 
-    # First streaming call
+    # --- First API call ---
     with client.messages.stream(**params) as stream:
         for text in stream.text_stream:
             yield text
@@ -146,53 +212,44 @@ def run_agent_stream(system_prompt, user_message, tools=None, usage_tracker=None
         usage_tracker["output_tokens"] += response.usage.output_tokens
         usage_tracker["api_calls"] += 1
 
-    # Agentic loop — keep going if the agent is using tools
+    # --- Agentic loop: keep going while Claude wants to use tools ---
     while response.stop_reason != "end_turn":
-        messages.append({"role": "assistant", "content": response.content})
+
+        # FIX: Convert response content to dicts and strip trailing
+        # whitespace from text blocks. The API rejects messages where
+        # the final assistant content ends with trailing whitespace.
+        assistant_content = []
+        for block in response.content:
+            if hasattr(block, "text") and block.text:
+                assistant_content.append({
+                    "type": "text",
+                    "text": block.text.rstrip()
+                })
+            elif hasattr(block, "type") and block.type == "tool_use":
+                assistant_content.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+            else:
+                # Server-handled tool results, etc. — pass through as-is
+                assistant_content.append(block)
+
+        messages.append({"role": "assistant", "content": assistant_content})
         params["messages"] = messages
 
+        # Next iteration of the loop
         with client.messages.stream(**params) as stream:
             for text in stream.text_stream:
                 yield text
             response = stream.get_final_message()
 
-        # Track each loop iteration's usage too
+        # Track token usage for this iteration too
         if usage_tracker is not None:
             usage_tracker["input_tokens"] += response.usage.input_tokens
             usage_tracker["output_tokens"] += response.usage.output_tokens
             usage_tracker["api_calls"] += 1
-
-
-def run_agent_full(system_prompt, user_message, tools=None):
-    """Run a single agent. Returns the complete text output (no streaming)."""
-
-    messages = [{"role": "user", "content": user_message}]
-
-    params = {
-        "model": "claude-sonnet-4-5-20250929",
-        "max_tokens": 4096,
-        "system": system_prompt,
-        "messages": messages,
-    }
-    if tools:
-        params["tools"] = tools
-
-    with client.messages.stream(**params) as stream:
-        response = stream.get_final_message()
-
-    while response.stop_reason != "end_turn":
-        messages.append({"role": "assistant", "content": response.content})
-        params["messages"] = messages
-
-        with client.messages.stream(**params) as stream:
-            response = stream.get_final_message()
-
-    result = ""
-    for block in response.content:
-        if hasattr(block, "text"):
-            result += block.text
-
-    return result
 
 
 # ============================================================
