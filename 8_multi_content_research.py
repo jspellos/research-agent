@@ -410,6 +410,12 @@ if st.button("🚀 Run Research", type="primary"):
     if not required_filled:
         st.error("Please fill in all required fields before running.")
         st.stop()
+    # Clear any previous results so a fresh run starts clean
+    for key in ["research_done", "final_content", "research_text", "writer_text",
+                "editor_text", "full_output", "docx_bytes", "base_filename",
+                "md_filename", "docx_filename", "word_available", "usage",
+                "initial_prompt"]:
+        st.session_state.pop(key, None)
 
     # ============================
     # GATHER ALL SOURCE MATERIAL
@@ -478,6 +484,9 @@ if st.button("🚀 Run Research", type="primary"):
 
     if source_sections:
         research_input += "\n\nSOURCE MATERIAL PROVIDED:\n\n" + "\n\n".join(source_sections)
+
+    # Save the initial prompt so it can be included in saved files
+    st.session_state["initial_prompt"] = research_input
 
     # ============================
     # INITIALIZE TOKEN TRACKING
@@ -569,10 +578,11 @@ if st.button("🚀 Run Research", type="primary"):
     # Determine the final content (edited if available, otherwise written)
     final_content = editor_text if editor_text else writer_text
 
-    # Build the full markdown output
+    # Build the full markdown output (includes prompt + all agent outputs)
     full_output = f"# {profile['name']}: {safe_name}\n"
     full_output += f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n"
     full_output += f"*Profile: {profile['name']}*\n\n"
+    full_output += f"---\n\n## INITIAL PROMPT\n\n{st.session_state.get('initial_prompt', topic)}\n\n"
     full_output += f"---\n\n## RESEARCH NOTES\n\n{research_text}\n\n"
     full_output += f"---\n\n## WRITTEN CONTENT\n\n{writer_text}\n\n"
 
@@ -646,8 +656,17 @@ if st.button("🚀 Run Research", type="primary"):
                             if idx % 2 == 1:  # odd parts are between ** markers
                                 run.bold = True
 
-        # Add the final report content (edited version if available)
-        add_content_to_doc(doc, final_content, section_title=None)
+        # --- Section 1: Initial Prompt ---
+        add_content_to_doc(doc, st.session_state.get("initial_prompt", topic), section_title="Initial Prompt")
+        doc.add_page_break()
+
+        # --- Section 2: Research Notes ---
+        add_content_to_doc(doc, research_text, section_title="Research Notes")
+        doc.add_page_break()
+
+        # --- Section 3: Final Content (edited if available, otherwise written) ---
+        section_label = "Edited Content" if editor_text else "Written Content"
+        add_content_to_doc(doc, final_content, section_title=section_label)
 
         # Save Word doc
         docx_filename = f"Output/{base_filename}.docx"
@@ -661,14 +680,44 @@ if st.button("🚀 Run Research", type="primary"):
 
     except ImportError:
         word_available = False
+        docx_bytes = None
+        docx_filename = ""
         st.warning("Install python-docx for Word document output: `pip install python-docx`")
 
-    # Download buttons
+    # Store everything in session state so downloads don't clear the page
+    st.session_state["research_done"] = True
+    st.session_state["final_content"] = final_content
+    st.session_state["research_text"] = research_text
+    st.session_state["writer_text"] = writer_text
+    st.session_state["editor_text"] = editor_text
+    st.session_state["full_output"] = full_output
+    st.session_state["docx_bytes"] = docx_bytes
+    st.session_state["base_filename"] = base_filename
+    st.session_state["md_filename"] = md_filename
+    st.session_state["docx_filename"] = docx_filename if word_available else ""
+    st.session_state["word_available"] = word_available
+    st.session_state["usage"] = usage
+
+    st.info(f"Saved locally to {md_filename}" + (f" and {docx_filename}" if word_available else ""))
+
+# ============================
+# DOWNLOAD BUTTONS & NEW RESEARCH
+# (rendered from session state — survives download reruns)
+# ============================
+if st.session_state.get("research_done"):
+    word_available = st.session_state.get("word_available", False)
+    docx_bytes     = st.session_state.get("docx_bytes")
+    full_output    = st.session_state.get("full_output", "")
+    base_filename  = st.session_state.get("base_filename", "output")
+    md_filename    = st.session_state.get("md_filename", "output.md")
+    docx_filename  = st.session_state.get("docx_filename", "")
+    usage          = st.session_state.get("usage", {"input_tokens": 0, "output_tokens": 0, "api_calls": 0})
+
     st.markdown("---")
 
-    dl_col1, dl_col2 = st.columns(2)
+    dl_col1, dl_col2, dl_col3 = st.columns(3)
 
-    if word_available:
+    if word_available and docx_bytes:
         dl_col1.download_button(
             label="📥 Download Word Document",
             data=docx_bytes,
@@ -683,7 +732,13 @@ if st.button("🚀 Run Research", type="primary"):
         mime="text/markdown",
     )
 
-    st.info(f"Saved locally to {md_filename}" + (f" and {docx_filename}" if word_available else ""))
+    if dl_col3.button("🔄 New Research", type="secondary"):
+        for key in ["research_done", "final_content", "research_text", "writer_text",
+                    "editor_text", "full_output", "docx_bytes", "base_filename",
+                    "md_filename", "docx_filename", "word_available", "usage",
+                    "initial_prompt"]:
+            st.session_state.pop(key, None)
+        st.rerun()
 
     # ============================
     # TOKEN USAGE SUMMARY (if enabled)
