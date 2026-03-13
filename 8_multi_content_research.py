@@ -701,6 +701,28 @@ if st.button("🚀 Run Research", type="primary"):
     st.info(f"Saved locally to {md_filename}" + (f" and {docx_filename}" if word_available else ""))
 
 # ============================
+# RE-RENDER COMPLETED OUTPUT FROM SESSION STATE
+# (runs on every rerun — keeps content visible after downloads)
+# ============================
+if st.session_state.get("research_done"):
+    research_text = st.session_state.get("research_text", "")
+    writer_text   = st.session_state.get("writer_text", "")
+    editor_text   = st.session_state.get("editor_text", "")
+
+    st.header("📋 Research Agent")
+    st.markdown(research_text.replace("$", "\\$"))
+    st.success("Research complete!")
+
+    st.header("✍️ Writer Agent")
+    st.markdown(writer_text.replace("$", "\\$"))
+    st.success("Writing complete!")
+
+    if editor_text:
+        st.header("🔍 Editor Agent")
+        st.markdown(editor_text.replace("$", "\\$"))
+        st.success("Editing complete!")
+
+# ============================
 # DOWNLOAD BUTTONS & NEW RESEARCH
 # (rendered from session state — survives download reruns)
 # ============================
