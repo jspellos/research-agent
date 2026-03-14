@@ -176,7 +176,7 @@ def get_webpage_content(url):
 #   - Increased max_tokens from 4096 to 16000 for research output
 # ============================================================
 
-def run_agent_stream(system_prompt, user_message, tools=None, usage_tracker=None):
+def run_agent_stream(system_prompt, user_message, tools=None, usage_tracker=None, temperature=None):
     """Run a single agent with streaming. Yields text chunks as they arrive.
     
     Handles the agentic loop: if Claude wants to use tools (like web search),
@@ -199,6 +199,8 @@ def run_agent_stream(system_prompt, user_message, tools=None, usage_tracker=None
     }
     if tools:
         params["tools"] = tools
+    if temperature is not None:
+        params["temperature"] = temperature
 
     # --- First API call ---
     with client.messages.stream(**params) as stream:
@@ -298,6 +300,30 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Display Options:**")
     show_tokens = st.checkbox("Show token usage & cost", value=False)
+
+    st.markdown("---")
+    st.markdown("**Response Style:**")
+    temperature_options = {
+        "Precise (0.1) — Factual, deterministic": 0.1,
+        "Focused (0.3) — Analytical, consistent": 0.3,
+        "Balanced (0.5) — General purpose": 0.5,
+        "Creative (0.7) — Varied, expressive": 0.7,
+        "Adventurous (0.9) — Highly diverse": 0.9,
+    }
+    selected_temp_label = st.selectbox(
+        "Temperature:",
+        options=list(temperature_options.keys()),
+        index=1,
+    )
+    temperature = temperature_options[selected_temp_label]
+    temp_descriptions = {
+        0.1: "Picks the most likely word almost every time. Best for data extraction and factual lookups.",
+        0.3: "Slight variation but highly reliable. Ideal for research synthesis and structured analysis.",
+        0.5: "Balanced between consistency and natural expression. Good all-purpose setting.",
+        0.7: "Noticeably more varied language. Good for brainstorming and exploratory writing.",
+        0.9: "High variety — the model takes real risks with word choice. Expect surprises.",
+    }
+    st.caption(temp_descriptions[temperature])
 
     st.markdown("---")
     st.markdown("**Source Inputs:**")
@@ -508,6 +534,7 @@ if st.button("🚀 Run Research", type="primary"):
         user_message=research_input,
         tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches}],
         usage_tracker=usage,
+        temperature=temperature,
     ):
         research_text += chunk
         research_container.markdown(research_text.replace("$", "\\$"))
@@ -530,6 +557,7 @@ if st.button("🚀 Run Research", type="primary"):
         user_message=f"Here are the research notes to work from:\n\n{research_text}",
         tools=None,
         usage_tracker=usage,
+        temperature=temperature,
     ):
         writer_text += chunk
         writer_container.markdown(writer_text.replace("$", "\\$"))
@@ -556,6 +584,7 @@ if st.button("🚀 Run Research", type="primary"):
             user_message=editor_input,
             tools=None,
             usage_tracker=usage,
+            temperature=temperature,
         ):
             editor_text += chunk
             editor_container.markdown(editor_text.replace("$", "\\$"))
